@@ -28,10 +28,10 @@ import ghidra.app.util.bin.format.dwarf4.next.DWARFLocalImporter;
 
 public class DWARFLocalAnalyzer extends AbstractAnalyzer {
 
-	protected DWARFLocalAnalyzer(String name, String description, AnalyzerType type) {
+	public DWARFLocalAnalyzer() {
 		super("Dwarf Locals", "adds dwarf locals late stage to use stack analysis", AnalyzerType.BYTE_ANALYZER);
 		setPriority(AnalysisPriority.FUNCTION_ANALYSIS.after());
-		// TODO Auto-generated constructor stub
+		setDefaultEnablement(true);
 	}
 
 	@Override
