@@ -30,7 +30,7 @@ public class DWARFLocalAnalyzer extends AbstractAnalyzer {
 
 	public DWARFLocalAnalyzer() {
 		super("Dwarf Locals", "adds dwarf locals late stage to use stack analysis", AnalyzerType.BYTE_ANALYZER);
-		setPriority(AnalysisPriority.FUNCTION_ANALYSIS.after());
+		setPriority(AnalysisPriority.DATA_TYPE_PROPOGATION.after().after().after());
 		setDefaultEnablement(true);
 	}
 

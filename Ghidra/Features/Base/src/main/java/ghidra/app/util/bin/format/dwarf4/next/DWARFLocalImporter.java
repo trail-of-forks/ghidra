@@ -1,5 +1,6 @@
 package ghidra.app.util.bin.format.dwarf4.next;
 
+import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFAttribute.DW_AT_low_pc;
 import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_call_site;
 import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_gnu_call_site;
 import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_label;
@@ -9,11 +10,18 @@ import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_variabl
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import com.google.common.base.Objects;
 
+import ghidra.app.util.bin.BinaryReader;
+import ghidra.app.util.bin.format.dwarf.line.StateMachine;
+import ghidra.app.util.bin.format.dwarf.line.StatementProgramInstructions;
+import ghidra.app.util.bin.format.dwarf.line.StatementProgramPrologue;
 import ghidra.app.util.bin.format.dwarf4.DIEAggregate;
 import ghidra.app.util.bin.format.dwarf4.DWARFLocation;
+import ghidra.app.util.bin.format.dwarf4.DebugInfoEntry;
+import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.Undefined;
 import ghidra.program.model.listing.CodeUnit;
@@ -29,20 +37,25 @@ import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.util.exception.InvalidInputException;
 import ghidra.util.task.TaskMonitor;
-
+import ghidra.app.util.bin.format.dwarf4.encoding.DWARFAttribute;
 import ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag;
 import ghidra.app.util.bin.format.dwarf4.next.DWARFFunctionImporter.DWARFFunction;
 import ghidra.app.util.bin.format.dwarf4.next.DWARFVariableVisitor.DWARFVariable;
 import ghidra.app.cmd.function.CallDepthChangeInfo;
+import ghidra.app.plugin.core.analysis.DwarfLineNumberAnalyzer;
+
 import java.util.ArrayList;
+import java.util.HashSet;
 
 public class DWARFLocalImporter extends DWARFVariableVisitor {
 
 	private final TaskMonitor monitor;
+	private final Set<Address> prologue_ends;
 
 	public DWARFLocalImporter(DWARFProgram prog, DWARFDataTypeManager dwarfDTM,TaskMonitor monitor) {
 		super( prog, prog.getGhidraProgram(), dwarfDTM);
 		this.monitor = monitor;
+		this.prologue_ends = new HashSet<>();
 	}
 
 	private void commitLocal(Function func, DWARFVariable dvar) throws InvalidInputException {
@@ -51,6 +64,8 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 
 		// check for an existing local variable with conflict storage.
 		boolean hasConflict = false;
+
+		Msg.info(this, "Adding " + dvar.dni.getName());
 		for (Variable existingVar : func.getAllVariables()) {
 			if (existingVar.getFirstUseOffset() == var.getFirstUseOffset()
 					&& existingVar.getVariableStorage().intersects(var.getVariableStorage())) {
@@ -89,8 +104,62 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 
 	}
 	
+	
+	static class LineExecutorFactory implements DwarfLineNumberAnalyzer.StatementProgramInstructionsFactory {
+		private final Program currentProgram;
+		private final Set<Address> addresses;
+		
+		
+		public LineExecutorFactory(Program currentProgram, Set<Address> addresses) {
+			super();
+			this.currentProgram = currentProgram;
+			this.addresses = addresses;
+		}
+
+
+		@Override
+		public StatementProgramInstructions create(BinaryReader reader, StateMachine machine,
+				StatementProgramPrologue prologue) {
+			return new LineExecutor(reader, machine, prologue, this.currentProgram, this.addresses);
+		}
+		
+	}
+	
+	static class LineExecutor extends StatementProgramInstructions {
+
+		private final Program currentProgram;
+		private final Set<Address> addresses;
+		
+		
+		
+		public LineExecutor(BinaryReader reader, StateMachine machine, StatementProgramPrologue prologue,
+				Program currentProgram, Set<Address> addresses) {
+			super(reader, machine, prologue);
+			this.currentProgram = currentProgram;
+			this.addresses = addresses;
+		}
+
+	
+
+		@Override
+		protected void emitRow(StateMachine state, StatementProgramPrologue prologue) {
+			if (state.isPrologueEnd) {
+				var addr = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(state.address);
+				Msg.info(this, "Prologue_end: " + addr.toString());
+				this.addresses.add(addr);
+			}
+		}
+		
+	}
+	
+	
+	private void collectPrologueEnds() {
+		DwarfLineNumberAnalyzer.visitLines(currentProgram, monitor, new LineExecutorFactory(this.currentProgram, this.prologue_ends));
+	}
+	
 	public void process()
 			throws CancelledException {
+		this.collectPrologueEnds();
 		for (DIEAggregate diea : DIEAMonitoredIterator.iterable(prog, "DWARF - Create Funcs & Symbols", monitor)) {
 			monitor.checkCanceled();
 			try {
@@ -112,6 +181,30 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 
 	}
 
+	private void processFuncChildren(DebugInfoEntry die, DWARFFunction dfunc, ArrayList<DWARFVariable> vbuf, Optional<Address> scope_start) throws IOException, InvalidInputException {
+		var diea = prog.getAggregate(die);
+		switch(diea.getTag()) {
+		case DWARFTag.DW_TAG_lexical_block:
+			if (diea.hasAttribute(DW_AT_low_pc)) {
+				var lpc = diea.getLowPC(-1);
+				if (lpc != -1) {
+					scope_start = Optional.of(toAddr(lpc));
+				}
+			}
+			for (var child : diea.getHeadFragment().getChildren()) {
+				Msg.info(this, "Starting block: " + scope_start.toString());
+				processFuncChildren(child, dfunc, vbuf, scope_start);
+			}
+			break;
+		case DWARFTag.DW_TAG_variable:
+			var v = this.processVariable(diea, dfunc, scope_start.orElseGet(()-> null), dfunc.address.getOffset());
+			if (v != null) {
+				vbuf.add(v);
+			}
+			break;
+		}
+	}
+	
 	private void processSubprogram(DIEAggregate diea) throws InvalidInputException, IOException {
 		var dfunc = this.populateDWARFFunc(diea);
 		var gfunc = currentProgram.getFunctionManager().getFunctionAt(dfunc.address);
@@ -119,20 +212,18 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 			return;
 		}
 		
+		Msg.info(this, "Working on func " + gfunc.getName());
+		
 		var vlist = new ArrayList<DWARFVariable>();
 		
-		for (var child : diea.getChildren(DW_TAG_variable)) {
-			var agg  = prog.getAggregate(child);
-			var v = this.processVariable(agg, dfunc, null, dfunc.address.getOffset());
-			if (v != null) {
-				vlist.add(v);
-			}
+		for (var child : diea.getHeadFragment().getChildren()) {
+			processFuncChildren(child, dfunc, vlist, Optional.empty());
 		}
 		
 		if (!dfunc.localVarErrors) {
 			for (var v: vlist) {
 				if(v.isStackOffset) {
-				commitLocal(gfunc, v);
+					commitLocal(gfunc, v);
 				}
 			}
 		}
@@ -140,14 +231,19 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 	}
 
 	@Override
-	protected Optional<Long> resolveStackOffset(long off, DWARFLocation loc, DWARFFunction dfunc) {
+	protected Optional<Long> resolveStackOffset(long off, DWARFLocation loc, DWARFFunction dfunc, boolean validRange, Optional<Address> block_start) {
 		var func = this.currentProgram.getFunctionManager().getFunctionAt(dfunc.address);
-		var live_at = toAddr(loc.getRange().getFrom());
-		if (func != null && prog.getRegisterMappings().getGhidraReg( prog.getRegisterMappings().getDWARFStackPointerRegNum()) == currentProgram.getCompilerSpec().getStackPointer()) {
+		var live_at = block_start;
+		if (validRange) {
+			live_at = Optional.of(toAddr(loc.getRange().getFrom()));
+		}
+		if (live_at.isPresent() && func != null && prog.getRegisterMappings().getGhidraReg( prog.getRegisterMappings().getDWARFStackPointerRegNum()) == currentProgram.getCompilerSpec().getStackPointer()) {
 			var cdi = new CallDepthChangeInfo(func);
-			var curr_sp_depth = cdi.getSPDepth(live_at);
+			var curr_sp_depth = cdi.getSPDepth(live_at.get());
 			if (curr_sp_depth != Function.INVALID_STACK_DEPTH_CHANGE) {
 				return Optional.of(off + curr_sp_depth);
+			} else {
+				Msg.warn(this, "No SP depth at addr: " + live_at);
 			}
 		}		
 		return Optional.empty();

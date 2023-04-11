@@ -29,6 +29,7 @@ public class StatementProgramPrologue {
 	private short      version;
 	private int        prologueLength;
 	private byte       minimumInstructionLength;
+	private byte 	   maximum_operations_per_instruction;
 	private boolean    defaultIsStatement;
 	private byte       lineBase;
 	private byte       lineRange;
@@ -42,12 +43,13 @@ public class StatementProgramPrologue {
 		totalLength                = reader.readNextInt();
 		version                    = reader.readNextShort();
 
-		if (version != 2) {
-			throw new IllegalStateException("Only DWARF v2 is supported.");
-		}
-
 		prologueLength             = reader.readNextInt();
 		minimumInstructionLength   = reader.readNextByte();
+		if (version >= 4) {
+			maximum_operations_per_instruction = reader.readNextByte();
+		} else {
+			maximum_operations_per_instruction = 1;
+		}
 		defaultIsStatement         = reader.readNextByte() != 0;
 		lineBase                   = reader.readNextByte();
 		lineRange                  = reader.readNextByte();

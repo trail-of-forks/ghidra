@@ -839,7 +839,7 @@ public class DWARFFunctionImporter extends DWARFVariableVisitor {
 	}
 
 	@Override
-	protected Optional<Long> resolveStackOffset(long off, DWARFLocation loc, DWARFFunction dfunc) {
+	protected Optional<Long> resolveStackOffset(long off, DWARFLocation loc, DWARFFunction dfunc, boolean validRange, Optional<Address> block_start) {
 		return Optional.empty();
 	}
 }

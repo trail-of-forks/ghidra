@@ -56,6 +56,12 @@ public class StateMachine {
 	 * the end of a sequence of target machine instructions.
 	 */
 	public boolean isEndSequence;
+	
+	
+	/**
+	 * Did we just execute a prologue end
+	 */
+	public boolean isPrologueEnd;
 
 	public void reset(boolean defaultIsStatement) {
 		address = 0;
@@ -65,6 +71,7 @@ public class StateMachine {
 		isStatement = defaultIsStatement;
 		isBasicBlock = false;
 		isEndSequence = false;
+		isPrologueEnd = false;
 	}
 
 	void print() {

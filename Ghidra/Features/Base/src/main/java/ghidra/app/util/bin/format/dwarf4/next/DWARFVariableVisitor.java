@@ -13,6 +13,8 @@ import ghidra.app.cmd.comments.AppendCommentCmd;
 import ghidra.app.cmd.label.SetLabelPrimaryCmd;
 import ghidra.app.util.bin.format.dwarf4.DIEAggregate;
 import ghidra.app.util.bin.format.dwarf4.DWARFLocation;
+import ghidra.app.util.bin.format.dwarf4.attribs.DWARFBlobAttribute;
+import ghidra.app.util.bin.format.dwarf4.attribs.DWARFNumericAttribute;
 import ghidra.app.util.bin.format.dwarf4.encoding.DWARFAttribute;
 import ghidra.app.util.bin.format.dwarf4.expression.DWARFExpression;
 import ghidra.app.util.bin.format.dwarf4.expression.DWARFExpressionEvaluator;
@@ -116,7 +118,7 @@ public abstract class DWARFVariableVisitor {
 
 	
 	
-	abstract protected  Optional<Long> resolveStackOffset(long off,DWARFLocation loc, DWARFFunction dfunc);
+	abstract protected  Optional<Long> resolveStackOffset(long off,DWARFLocation loc, DWARFFunction dfunc, boolean validRange, Optional<Address> block_start);
 	
 	/**
 	 * Creates a new {@link DWARFVariable} from the specified {@link DIEAggregate DIEA} and
@@ -152,7 +154,12 @@ public abstract class DWARFVariableVisitor {
 					return null;
 				}
 			
+				
+				
+				
 				List<DWARFLocation> locList = diea.getAsLocation(DWARFAttribute.DW_AT_location);
+				
+				var valid_range = diea.hasAttribute(DWARFAttribute.DW_AT_location) && diea.getAttribute(DWARFAttribute.DW_AT_location) instanceof DWARFNumericAttribute;
 			
 				// If we are trying to recover a local variable, only process the
 				// variable if it has a single location over the entire function
@@ -216,7 +223,7 @@ public abstract class DWARFVariableVisitor {
 					return null;
 				}
 				else if (exprEvaluator.isStackRelative()) {
-					var ajustedoff = this.resolveStackOffset(res, topLocation, dfunc);
+					var ajustedoff = this.resolveStackOffset(res, topLocation, dfunc, valid_range, Optional.ofNullable(lexicalStart));
 					if (!ajustedoff.isPresent()) {
 						dfunc.localVarErrors = true;
 						return null;
