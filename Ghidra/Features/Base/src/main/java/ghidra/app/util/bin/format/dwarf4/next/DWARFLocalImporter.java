@@ -9,6 +9,7 @@ import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_variabl
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -45,17 +46,18 @@ import ghidra.app.cmd.function.CallDepthChangeInfo;
 import ghidra.app.plugin.core.analysis.DwarfLineNumberAnalyzer;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 
 public class DWARFLocalImporter extends DWARFVariableVisitor {
 
 	private final TaskMonitor monitor;
-	private final Set<Address> prologue_ends;
+	private final Map<Function, Address> prologue_ends;
 
 	public DWARFLocalImporter(DWARFProgram prog, DWARFDataTypeManager dwarfDTM,TaskMonitor monitor) {
 		super( prog, prog.getGhidraProgram(), dwarfDTM);
 		this.monitor = monitor;
-		this.prologue_ends = new HashSet<>();
+		this.prologue_ends = new HashMap<>();
 	}
 
 	private void commitLocal(Function func, DWARFVariable dvar) throws InvalidInputException {
@@ -106,13 +108,13 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 	
 	
 	static class LineExecutorFactory implements DwarfLineNumberAnalyzer.StatementProgramInstructionsFactory {
-		private final Program currentProgram;
-		private final Set<Address> addresses;
+		private final DWARFProgram prog;
+		private final Map<Function, Address> addresses;
 		
 		
-		public LineExecutorFactory(Program currentProgram, Set<Address> addresses) {
+		public LineExecutorFactory(DWARFProgram prog, Map<Function, Address> addresses) {
 			super();
-			this.currentProgram = currentProgram;
+			this.prog = prog;
 			this.addresses = addresses;
 		}
 
@@ -120,22 +122,22 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 		@Override
 		public StatementProgramInstructions create(BinaryReader reader, StateMachine machine,
 				StatementProgramPrologue prologue) {
-			return new LineExecutor(reader, machine, prologue, this.currentProgram, this.addresses);
+			return new LineExecutor(reader, machine, prologue, this.prog, this.addresses);
 		}
 		
 	}
 	
 	static class LineExecutor extends StatementProgramInstructions {
 
-		private final Program currentProgram;
-		private final Set<Address> addresses;
+		private final DWARFProgram prog;
+		private final Map<Function, Address> addresses;
 		
 		
 		
 		public LineExecutor(BinaryReader reader, StateMachine machine, StatementProgramPrologue prologue,
-				Program currentProgram, Set<Address> addresses) {
+				DWARFProgram prog,Map<Function, Address> addresses) {
 			super(reader, machine, prologue);
-			this.currentProgram = currentProgram;
+			this.prog = prog;
 			this.addresses = addresses;
 		}
 
@@ -144,9 +146,12 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 		@Override
 		protected void emitRow(StateMachine state, StatementProgramPrologue prologue) {
 			if (state.isPrologueEnd) {
-				var addr = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(state.address);
+				var addr = prog.getGhidraProgram().getAddressFactory().getDefaultAddressSpace().getAddress(((long) state.address) + prog.getProgramBaseAddressFixup());
 				Msg.info(this, "Prologue_end: " + addr.toString());
-				this.addresses.add(addr);
+				var func = prog.getGhidraProgram().getFunctionManager().getFunctionContaining(addr);
+				if (func != null) {
+					this.addresses.put(func,addr);
+				}
 			}
 		}
 		
@@ -154,7 +159,7 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 	
 	
 	private void collectPrologueEnds() {
-		DwarfLineNumberAnalyzer.visitLines(currentProgram, monitor, new LineExecutorFactory(this.currentProgram, this.prologue_ends));
+		DwarfLineNumberAnalyzer.visitLines(currentProgram, monitor, new LineExecutorFactory(this.prog, this.prologue_ends));
 	}
 	
 	public void process()
@@ -229,6 +234,10 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 		}
 		
 	}
+	
+	private Optional<Address> getPrologueAddr(Function gfunc) {
+		return Optional.ofNullable(this.prologue_ends.get(gfunc));
+	}
 
 	@Override
 	protected Optional<Long> resolveStackOffset(long off, DWARFLocation loc, DWARFFunction dfunc, boolean validRange, Optional<Address> block_start) {
@@ -237,6 +246,11 @@ public class DWARFLocalImporter extends DWARFVariableVisitor {
 		if (validRange) {
 			live_at = Optional.of(toAddr(loc.getRange().getFrom()));
 		}
+		
+		if (!live_at.isPresent()) {
+			live_at = getPrologueAddr(func);
+		}
+		
 		if (live_at.isPresent() && func != null && prog.getRegisterMappings().getGhidraReg( prog.getRegisterMappings().getDWARFStackPointerRegNum()) == currentProgram.getCompilerSpec().getStackPointer()) {
 			var cdi = new CallDepthChangeInfo(func);
 			var curr_sp_depth = cdi.getSPDepth(live_at.get());

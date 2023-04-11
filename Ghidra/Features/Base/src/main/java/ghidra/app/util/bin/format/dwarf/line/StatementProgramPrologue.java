@@ -29,12 +29,13 @@ public class StatementProgramPrologue {
 	private short      version;
 	private int        prologueLength;
 	private byte       minimumInstructionLength;
-	private byte 	   maximum_operations_per_instruction;
+	private byte 	   maximumOperationsPerInstruction;
 	private boolean    defaultIsStatement;
 	private byte       lineBase;
 	private byte       lineRange;
 	private byte       opcodeBase;
 	private byte []    standardOpcodeLengths;
+
 
 	private List<String>     includeDirectories = new ArrayList<String>();
 	private List<FileEntry>  fileNames          = new ArrayList<FileEntry>();
@@ -46,9 +47,9 @@ public class StatementProgramPrologue {
 		prologueLength             = reader.readNextInt();
 		minimumInstructionLength   = reader.readNextByte();
 		if (version >= 4) {
-			maximum_operations_per_instruction = reader.readNextByte();
+			maximumOperationsPerInstruction = reader.readNextByte();
 		} else {
-			maximum_operations_per_instruction = 1;
+			maximumOperationsPerInstruction = 1;
 		}
 		defaultIsStatement         = reader.readNextByte() != 0;
 		lineBase                   = reader.readNextByte();
@@ -71,6 +72,10 @@ public class StatementProgramPrologue {
 			}
 			fileNames.add(entry);
 		}
+	}
+	
+	public byte getMaximumOperationsPerInstruction() {
+		return maximumOperationsPerInstruction;
 	}
 
 	/**

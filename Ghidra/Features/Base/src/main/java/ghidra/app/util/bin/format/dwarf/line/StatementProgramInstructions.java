@@ -86,7 +86,9 @@ abstract public class StatementProgramInstructions {
 
 	private void executeSpecial(int specialOpcodeValue) {
 		int adjustedOpcode = (specialOpcodeValue & 0xff) - prologue.getOpcodeBase();
-		int addressIncrement = adjustedOpcode / prologue.getLineRange();
+		int op_advance = adjustedOpcode / prologue.getLineRange();
+		int addressIncrement = (prologue.getMinimumInstructionLength() * ((op_advance + machine.op_index) / prologue.getMaximumOperationsPerInstruction() ));
+		int new_opindex = (machine.op_index + op_advance) %  prologue.getMaximumOperationsPerInstruction();
 		Msg.info(this, "Adjusted opcode: " + Integer.toString(adjustedOpcode));
 		Msg.info(this, "Increment: " + Integer.toString(addressIncrement));
 		Msg.info(this, "Lrange: " + Integer.toString( prologue.getLineRange()));
@@ -98,7 +100,8 @@ abstract public class StatementProgramInstructions {
 
 		machine.line += (byte) lineIncrement;
 		machine.address += (addressIncrement * prologue.getMinimumInstructionLength());
-		Msg.info(this, "Address increment for special: " + Long.toString((addressIncrement * prologue.getMinimumInstructionLength())));
+		machine.op_index = new_opindex;
+		Msg.info(this, "Address increment for special: " + Integer.toString(addressIncrement));
 		this.emitRow(machine, prologue);
 		machine.isBasicBlock = false;
 		machine.isPrologueEnd = false;
