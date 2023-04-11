@@ -31,7 +31,7 @@ public class StateMachine {
 	public int file;
 	
 	/**
-	 * The subop of this special op, always 0 in < v4
+	 * The subop of this special op, always 0 in dwarf versions less than 4
 	 */
 	public int op_index;
 	

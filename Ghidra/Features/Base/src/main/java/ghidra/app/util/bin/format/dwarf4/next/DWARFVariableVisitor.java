@@ -1,3 +1,19 @@
+/* ###
+ * IP: GHIDRA
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package ghidra.app.util.bin.format.dwarf4.next;
 
 import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFAttribute.DW_AT_external;
@@ -608,11 +624,10 @@ public abstract class DWARFVariableVisitor {
 
 	/**
 	 * Move an address range into a fragment.
-	 * @param cu current compile unit
 	 * @param name name of the fragment
 	 * @param start start address of the fragment
 	 * @param end end address of the fragment
-	 * @param fileID offset of the file name in the debug_line section
+	 * @param fileName file name of module
 	 */
 	protected void moveIntoFragment(String name, Address start, Address end, String fileName) {
 		if (fileName != null) {
@@ -657,11 +672,10 @@ public abstract class DWARFVariableVisitor {
 	}
 
 	/**
-	 * For some DWARF debugger strategies, the storage location provided for a formal parameter is NOT the initial storage
-	 * of the parameter and does not match the calling convention.  If the storage location provided is in the local variable
-	 * range for the function, this is an indication the storage does not represent the calling convention
-	 * @param dfunc is the DWARF function data to test
-	 * @return true if the storage locations represent the calling convention
+	 * 
+	 * @param dvar the dwarf variable to create a Ghidra var for
+	 * @return a Ghidra variable matching the storage and type declared by the dwarf var
+	 * @throws InvalidInputException
 	 */
 	protected Variable buildVariable(DWARFVariable dvar) throws InvalidInputException {
 		Varnode[] vnarray = buildVarnodes(dvar);
