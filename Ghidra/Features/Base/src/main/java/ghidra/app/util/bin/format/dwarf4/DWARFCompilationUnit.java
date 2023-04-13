@@ -351,8 +351,14 @@ public class DWARFCompilationUnit {
 		DebugInfoEntry parent = null;
 		DebugInfoEntry die;
 		DebugInfoEntry unexpectedTerminator = null;
-		while ((br.getPointerIndex() < getEndOffset()) &&
-			(die = DebugInfoEntry.read(br, this, dwarfProgram.getAttributeFactory())) != null) {
+		while ((br.getPointerIndex() < getEndOffset())) {
+			try {
+				die = DebugInfoEntry.read(br, this, dwarfProgram.getAttributeFactory());
+			}
+			catch (IOException ioe) {
+				Msg.error(null, "Skipping compilation unit " + this);
+				continue;
+			}
 
 			monitor.checkCanceled();
 
