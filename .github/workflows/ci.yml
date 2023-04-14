@@ -46,6 +46,7 @@ jobs:
         with:
           name: natives-${{ matrix.target }}
           path: "${{matrix.target}}.build.tar"
+          retention-days: 1
   build-java:
     name: Build Java
     needs: [build-natives]
@@ -91,6 +92,7 @@ jobs:
         with:
           name: ghidra
           path: "build/dist/*"
+          retention-days: 7
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
