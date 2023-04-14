@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build-natives:
     name: Build Native - ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
