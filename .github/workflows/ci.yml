@@ -19,7 +19,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        gradle_version: ["8.1"]
         include:
           - target: linux_x86_64
             os: ubuntu-latest
@@ -35,12 +34,12 @@ jobs:
       - name: Fetch deps
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: ${{ matrix.gradle-version }}
+          gradle-version: 8.1
           arguments: -I gradle/support/fetchDependencies.gradle init
       - name: Build natives
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: ${{ matrix.gradle-version }}
+          gradle-version: 8.1
           arguments: buildNatives_${{ matrix.target }}
       - name: Tar the binaries
         run: tar -cvf "${{matrix.target}}.build.tar" $(find . -path "*/build/os/${{ matrix.target }}/*" -type f)
