@@ -53,7 +53,7 @@ jobs:
     needs: [build-natives]
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secret.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
     steps:
