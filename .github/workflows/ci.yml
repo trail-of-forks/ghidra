@@ -1,13 +1,9 @@
 name: CI
 on:
-  release:
-    types:
-      - published
-  
   pull_request:
   push:
     branches:
-      - 'main'
+      - 'amp/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
