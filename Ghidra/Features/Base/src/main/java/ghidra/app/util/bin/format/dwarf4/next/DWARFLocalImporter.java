@@ -17,20 +17,15 @@
 package ghidra.app.util.bin.format.dwarf4.next;
 
 import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFAttribute.DW_AT_low_pc;
-import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_call_site;
-import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_gnu_call_site;
-import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_label;
-import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_subprogram;
-import static ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag.DW_TAG_variable;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
-import com.google.common.base.Objects;
-
+import ghidra.app.cmd.function.CallDepthChangeInfo;
+import ghidra.app.plugin.core.analysis.DwarfLineNumberAnalyzer;
 import ghidra.app.util.bin.BinaryReader;
 import ghidra.app.util.bin.format.dwarf.line.StateMachine;
 import ghidra.app.util.bin.format.dwarf.line.StatementProgramInstructions;
@@ -38,14 +33,13 @@ import ghidra.app.util.bin.format.dwarf.line.StatementProgramPrologue;
 import ghidra.app.util.bin.format.dwarf4.DIEAggregate;
 import ghidra.app.util.bin.format.dwarf4.DWARFLocation;
 import ghidra.app.util.bin.format.dwarf4.DebugInfoEntry;
+import ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag;
+import ghidra.app.util.bin.format.dwarf4.next.DWARFFunctionImporter.DWARFFunction;
 import ghidra.program.model.address.Address;
-import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.Undefined;
 import ghidra.program.model.listing.CodeUnit;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.LocalVariable;
-import ghidra.program.model.listing.Parameter;
-import ghidra.program.model.listing.Program;
 import ghidra.program.model.listing.Variable;
 import ghidra.program.model.listing.VariableUtilities;
 import ghidra.program.model.symbol.SourceType;
@@ -54,16 +48,6 @@ import ghidra.util.exception.CancelledException;
 import ghidra.util.exception.DuplicateNameException;
 import ghidra.util.exception.InvalidInputException;
 import ghidra.util.task.TaskMonitor;
-import ghidra.app.util.bin.format.dwarf4.encoding.DWARFAttribute;
-import ghidra.app.util.bin.format.dwarf4.encoding.DWARFTag;
-import ghidra.app.util.bin.format.dwarf4.next.DWARFFunctionImporter.DWARFFunction;
-import ghidra.app.util.bin.format.dwarf4.next.DWARFVariableVisitor.DWARFVariable;
-import ghidra.app.cmd.function.CallDepthChangeInfo;
-import ghidra.app.plugin.core.analysis.DwarfLineNumberAnalyzer;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 
 public class DWARFLocalImporter extends DWARFVariableVisitor {
 
