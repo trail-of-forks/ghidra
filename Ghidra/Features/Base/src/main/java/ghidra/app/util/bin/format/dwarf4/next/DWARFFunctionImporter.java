@@ -35,7 +35,6 @@ import ghidra.program.model.data.DataUtilities.ClearDataMode;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.listing.Function.FunctionUpdateType;
 import ghidra.program.model.symbol.*;
-import ghidra.program.model.util.CodeUnitInsertionException;
 import ghidra.util.Msg;
 import ghidra.util.exception.*;
 import ghidra.util.task.TaskMonitor;
@@ -44,7 +43,7 @@ import ghidra.util.task.TaskMonitor;
  * Iterates through all DIEAs in a {@link DWARFProgram} and creates Ghidra functions
  * and variables.
  */
-public class DWARFFunctionImporter {
+public class DWARFFunctionImporter extends DWARFVariableVisitor {
 
 	/**
 	 * Inline funcs shorter than this value receive comments at EOL instead of PRE
@@ -52,9 +51,6 @@ public class DWARFFunctionImporter {
 	 */
 	private static final int INLINE_FUNC_SHORT_LEN = 8;
 
-	private final DWARFProgram prog;
-	private final Program currentProgram;
-	private final DWARFDataTypeManager dwarfDTM;
 	private final DWARFImportOptions importOptions;
 	private final DWARFImportSummary importSummary;
 
@@ -79,14 +75,6 @@ public class DWARFFunctionImporter {
 		this.dwarfDTM = prog.getDwarfDTM();
 		this.importOptions = prog.getImportOptions();
 		this.importSummary = prog.getImportSummary();
-	}
-
-	private boolean shouldProcess(DIEAggregate diea) {
-		if (processedOffsets.contains(diea.getOffset())) {
-			return false;
-		}
-		processedOffsets.add(diea.getOffset());
-		return true;
 	}
 
 	public void importFunctions() throws CancelledException {
@@ -167,6 +155,9 @@ public class DWARFFunctionImporter {
 		}
 	}
 
+	
+	
+	
 	private void processSubprogram(DIEAggregate diea)
 			throws IOException, InvalidInputException, DWARFExpressionException {
 
