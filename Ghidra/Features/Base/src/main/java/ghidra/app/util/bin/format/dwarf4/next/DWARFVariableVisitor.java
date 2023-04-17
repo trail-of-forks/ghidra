@@ -90,8 +90,6 @@ public abstract class DWARFVariableVisitor {
 	private Set<Address> variablesProcesesed = new HashSet<>();
 	protected DWARFImportSummary importSummary;
 
-	
-	
 	protected DWARFFunction populateDWARFFunc(DIEAggregate diea) throws IOException {
 		DWARFFunction dfunc = new DWARFFunction(prog.getName(diea));
 		dfunc.namespace = dfunc.dni.getParentNamespace(currentProgram);
@@ -103,7 +101,7 @@ public abstract class DWARFVariableVisitor {
 		return dfunc;
 
 	}
-	
+
 	/**
 	 * Get the location that corresponds to the entry point of the function If
 	 * there is only a single location, assume it applies to whole function
@@ -132,10 +130,9 @@ public abstract class DWARFVariableVisitor {
 		return true;
 	}
 
-	
-	
-	abstract protected  Optional<Long> resolveStackOffset(long off,DWARFLocation loc, DWARFFunction dfunc, boolean validRange, Optional<Address> block_start);
-	
+	abstract protected Optional<Long> resolveStackOffset(long off, DWARFLocation loc,
+			DWARFFunction dfunc, boolean validRange, Optional<Address> block_start);
+
 	/**
 	 * Creates a new {@link DWARFVariable} from the specified {@link DIEAggregate DIEA} and
 	 * as a child of the specified function (if not null).
@@ -150,167 +147,166 @@ public abstract class DWARFVariableVisitor {
 	 * @throws IOException
 	 * @throws InvalidInputException
 	 */
-	protected DWARFVariable processVariable(DIEAggregate diea, DWARFFunction dfunc, Address lexicalStart, long firstUseAddr)
+	protected DWARFVariable processVariable(DIEAggregate diea, DWARFFunction dfunc,
+			Address lexicalStart, long firstUseAddr)
 			throws IOException, InvalidInputException {
-			
-				if (!shouldProcess(diea)) {
-					return null;
+
+		if (!shouldProcess(diea)) {
+			return null;
+		}
+
+		long funcAddr = (dfunc != null && dfunc.address != null) ? dfunc.address.getOffset() : -1;
+
+		DWARFVariable dvar = new DWARFVariable();
+		dvar.dni = prog.getName(diea);
+		dvar.lexicalOffset = dfunc != null && dfunc.address != null && lexicalStart != null
+				? lexicalStart.subtract(dfunc.address)
+				: -1;
+
+		// Unknown variable location
+		if (!diea.hasAttribute(DWARFAttribute.DW_AT_location)) {
+			return null;
+		}
+
+		List<DWARFLocation> locList = diea.getAsLocation(DWARFAttribute.DW_AT_location);
+
+		var valid_range = diea.hasAttribute(DWARFAttribute.DW_AT_location) &&
+			diea.getAttribute(DWARFAttribute.DW_AT_location) instanceof DWARFNumericAttribute;
+
+		// If we are trying to recover a local variable, only process the
+		// variable if it has a single location over the entire function
+		if ((firstUseAddr != -1) && locList.size() > 1) {
+			return null;
+		}
+
+		DWARFLocation topLocation = getTopLocation(locList, funcAddr);
+		if (topLocation == null) {
+			if (dfunc != null) {
+				dfunc.localVarErrors = true;
+			}
+			return null;
+		}
+
+		// Get the base type of this variable
+		dvar.type = dwarfDTM.getDataType(diea.getTypeRef(), dwarfDTM.getVoidType());
+
+		long frameBase = (dfunc != null) ? dfunc.frameBase : -1;
+		DWARFExpressionEvaluator exprEvaluator =
+			DWARFExpressionEvaluator.create(diea.getHeadFragment());
+		exprEvaluator.setFrameBase(frameBase);
+		long res;
+		try {
+			DWARFExpression expr = exprEvaluator.readExpr(topLocation.getLocation());
+			exprEvaluator.evaluate(expr);
+			res = exprEvaluator.pop();
+		}
+		catch (DWARFExpressionException | UnsupportedOperationException
+				| IndexOutOfBoundsException ex) {
+			importSummary.exprReadError++;
+			if (dfunc != null) {
+				dfunc.localVarErrors = true;
+			}
+
+			return null;
+		}
+
+		if (exprEvaluator.isDwarfStackValue()) {
+			importSummary.varDWARFExpressionValue++;
+			if (dfunc != null) {
+				dfunc.localVarErrors = true;
+			}
+			return null;
+		}
+		else if (exprEvaluator.useUnknownRegister() && exprEvaluator.isRegisterLocation()) {
+			dvar.reg = exprEvaluator.getLastRegister();
+			dvar.type = dwarfDTM.getPtrTo(dvar.type);
+
+			// TODO: fix this later.  Lie and use lexicalOffset-1 so the GUI correctly shows the first use
+			dvar.offset = dvar.lexicalOffset != -1 ? dvar.lexicalOffset - 1 : -1;
+			return dvar;
+		}
+		else if (exprEvaluator.useUnknownRegister()) {
+			importSummary.varDynamicRegisterError++;
+			if (dfunc != null) {
+				dfunc.localVarErrors = true;
+			}
+			return null;
+		}
+		else if (exprEvaluator.isStackRelative()) {
+			var ajustedoff = this.resolveStackOffset(res, topLocation, dfunc, valid_range,
+				Optional.ofNullable(lexicalStart));
+			if (!ajustedoff.isPresent()) {
+				dfunc.localVarErrors = true;
+				return null;
+			}
+
+			dvar.offset = ajustedoff.get();
+			dvar.reg = null;
+			dvar.isStackOffset = true;
+			if (exprEvaluator.isDeref()) {
+				dvar.type = dwarfDTM.getPtrTo(dvar.type);
+			}
+		}
+		else if (exprEvaluator.isRegisterLocation()) {
+			// The DWARF expression evaluated to a simple register.  If we have a mapping
+			// for it in the "processor.dwarf" register mapping file, try to create
+			// a variable, otherwise log the unknown register for later logging.
+			dvar.reg = exprEvaluator.getLastRegister();
+			if (dvar.reg != null) {
+				dvar.offset = -1;
+				if (firstUseAddr != -1) {
+					dvar.offset = findFirstUse(currentProgram, dvar.reg, funcAddr, firstUseAddr);
 				}
-			
-				long funcAddr = (dfunc != null && dfunc.address != null) ? dfunc.address.getOffset() : -1;
-			
-				DWARFVariable dvar = new DWARFVariable();
-				dvar.dni = prog.getName(diea);
-				dvar.lexicalOffset = dfunc != null && dfunc.address != null && lexicalStart != null
-						? lexicalStart.subtract(dfunc.address)
-						: -1;
-			
-				// Unknown variable location
-				if (!diea.hasAttribute(DWARFAttribute.DW_AT_location)) {
-					return null;
-				}
-			
-				
-				
-				
-				List<DWARFLocation> locList = diea.getAsLocation(DWARFAttribute.DW_AT_location);
-				
-				var valid_range = diea.hasAttribute(DWARFAttribute.DW_AT_location) && diea.getAttribute(DWARFAttribute.DW_AT_location) instanceof DWARFNumericAttribute;
-			
-				// If we are trying to recover a local variable, only process the
-				// variable if it has a single location over the entire function
-				if ((firstUseAddr != -1) && locList.size() > 1) {
-					return null;
-				}
-			
-				DWARFLocation topLocation = getTopLocation(locList, funcAddr);
-				if (topLocation == null) {
-					if (dfunc != null) {
-						dfunc.localVarErrors = true;
-					}
-					return null;
-				}
-				
-			
-			
-				// Get the base type of this variable
-				dvar.type = dwarfDTM.getDataType(diea.getTypeRef(), dwarfDTM.getVoidType());
-			
-				long frameBase = (dfunc != null) ? dfunc.frameBase : -1;
-				DWARFExpressionEvaluator exprEvaluator =
-					DWARFExpressionEvaluator.create(diea.getHeadFragment());
-				exprEvaluator.setFrameBase(frameBase);
-				long res;
-				try {
-					DWARFExpression expr = exprEvaluator.readExpr(topLocation.getLocation());
-					exprEvaluator.evaluate(expr);
-					res = exprEvaluator.pop();
-				}
-				catch (DWARFExpressionException | UnsupportedOperationException
-						| IndexOutOfBoundsException ex) {
-					importSummary.exprReadError++;
-					if (dfunc != null) {
-						dfunc.localVarErrors = true;
-					}
-			
-					return null;
-				}
-			
-				if (exprEvaluator.isDwarfStackValue()) {
-					importSummary.varDWARFExpressionValue++;
-					if (dfunc != null) {
-						dfunc.localVarErrors = true;
-					}
-					return null;
-				}
-				else if (exprEvaluator.useUnknownRegister() && exprEvaluator.isRegisterLocation()) {
-					dvar.reg = exprEvaluator.getLastRegister();
-					dvar.type = dwarfDTM.getPtrTo(dvar.type);
-			
-					// TODO: fix this later.  Lie and use lexicalOffset-1 so the GUI correctly shows the first use
-					dvar.offset = dvar.lexicalOffset != -1 ? dvar.lexicalOffset - 1 : -1;
-					return dvar;
-				}
-				else if (exprEvaluator.useUnknownRegister()) {
-					importSummary.varDynamicRegisterError++;
-					if (dfunc != null) {
-						dfunc.localVarErrors = true;
-					}
-					return null;
-				}
-				else if (exprEvaluator.isStackRelative()) {
-					var ajustedoff = this.resolveStackOffset(res, topLocation, dfunc, valid_range, Optional.ofNullable(lexicalStart));
-					if (!ajustedoff.isPresent()) {
-						dfunc.localVarErrors = true;
-						return null;
-					}
-					
-					dvar.offset = ajustedoff.get();
-					dvar.reg = null;
-					dvar.isStackOffset = true;
-					if (exprEvaluator.isDeref()) {
-						dvar.type = dwarfDTM.getPtrTo(dvar.type);
-					}
-				}
-				else if (exprEvaluator.isRegisterLocation()) {
-					// The DWARF expression evaluated to a simple register.  If we have a mapping
-					// for it in the "processor.dwarf" register mapping file, try to create
-					// a variable, otherwise log the unknown register for later logging.
-					dvar.reg = exprEvaluator.getLastRegister();
-					if (dvar.reg != null) {
-						dvar.offset = -1;
-						if (firstUseAddr != -1) {
-							dvar.offset = findFirstUse(currentProgram, dvar.reg, funcAddr, firstUseAddr);
-						}
-						if ((dvar.type != null) &&
-							(dvar.type.getLength() > dvar.reg.getMinimumByteSize())) {
-							importSummary.varFitError++;
-			
-							String contextStr = (dfunc != null)
-									? " for function " + dfunc.dni.getName() + "@" + dfunc.address
-									: "";
-							if (diea.getTag() != DW_TAG_formal_parameter) {
-								Msg.warn(this,
-									"Variable " + dvar.dni.getName() + "[" + dvar.type.getName() +
-										", size=" + dvar.type.getLength() + "]" + contextStr +
-										" can not fit into specified register " + dvar.reg.getName() +
-										", size=" + dvar.reg.getMinimumByteSize() +
-										", skipping.  DWARF DIE: " + diea.getHexOffset());
-								if (dfunc != null) {
-									dfunc.localVarErrors = true;
-								}
-								return null;
-							}
-			
-							dvar.type = dwarfDTM.getUndefined1Type();
-						}
-					}
-					else {
-						// The DWARF register did not have a mapping to a Ghidra register, so
-						// log it to be displayed in an error summary at end of import phase.
-						importSummary.unknownRegistersEncountered.add(exprEvaluator.getRawLastRegister());
+				if ((dvar.type != null) &&
+					(dvar.type.getLength() > dvar.reg.getMinimumByteSize())) {
+					importSummary.varFitError++;
+
+					String contextStr = (dfunc != null)
+							? " for function " + dfunc.dni.getName() + "@" + dfunc.address
+							: "";
+					if (diea.getTag() != DW_TAG_formal_parameter) {
+						Msg.warn(this,
+							"Variable " + dvar.dni.getName() + "[" + dvar.type.getName() +
+								", size=" + dvar.type.getLength() + "]" + contextStr +
+								" can not fit into specified register " + dvar.reg.getName() +
+								", size=" + dvar.reg.getMinimumByteSize() +
+								", skipping.  DWARF DIE: " + diea.getHexOffset());
 						if (dfunc != null) {
 							dfunc.localVarErrors = true;
 						}
 						return null;
 					}
-				}
-				else if (exprEvaluator.getLastRegister() == null) {
-					processStaticVar(res, dvar, diea);
-					return null;// Don't return the variable to be associated with the function
-				}
-				else {
-					Msg.error(this,
-						"LOCAL VAR: " + dvar.dni.getName() + " : " +
-							ghidra.app.util.bin.format.dwarf4.expression.DWARFExpression.exprToString(
-								topLocation.getLocation(), diea) +
-							", DWARF DIE: " + diea.getHexOffset());
-					return null;
-				}
-				return dvar;
-			}
 
-	private void processStaticVar(long address, DWARFVariable dvar, DIEAggregate diea) throws InvalidInputException {
+					dvar.type = dwarfDTM.getUndefined1Type();
+				}
+			}
+			else {
+				// The DWARF register did not have a mapping to a Ghidra register, so
+				// log it to be displayed in an error summary at end of import phase.
+				importSummary.unknownRegistersEncountered.add(exprEvaluator.getRawLastRegister());
+				if (dfunc != null) {
+					dfunc.localVarErrors = true;
+				}
+				return null;
+			}
+		}
+		else if (exprEvaluator.getLastRegister() == null) {
+			processStaticVar(res, dvar, diea);
+			return null;// Don't return the variable to be associated with the function
+		}
+		else {
+			Msg.error(this,
+				"LOCAL VAR: " + dvar.dni.getName() + " : " +
+					ghidra.app.util.bin.format.dwarf4.expression.DWARFExpression.exprToString(
+						topLocation.getLocation(), diea) +
+					", DWARF DIE: " + diea.getHexOffset());
+			return null;
+		}
+		return dvar;
+	}
+
+	private void processStaticVar(long address, DWARFVariable dvar, DIEAggregate diea)
+			throws InvalidInputException {
 		dvar.dni = dvar.dni.replaceType(null /*nothing matches static global var*/);
 		if (address != 0) {
 			Address staticVariableAddress = toAddr(address + prog.getProgramBaseAddressFixup());
@@ -318,13 +314,13 @@ public abstract class DWARFVariableVisitor {
 				processZeroByteStaticVar(staticVariableAddress, dvar);
 				return;
 			}
-	
+
 			if (variablesProcesesed.contains(staticVariableAddress)) {
 				return;
 			}
-	
+
 			boolean external = diea.getBool(DW_AT_external, false);
-	
+
 			outputGlobal(staticVariableAddress, dvar.type, external,
 				DWARFSourceInfo.create(diea), dvar.dni);
 		}
@@ -338,7 +334,8 @@ public abstract class DWARFVariableVisitor {
 		}
 	}
 
-	private void processZeroByteStaticVar(Address staticVariableAddress, DWARFVariable dvar) throws InvalidInputException {
+	private void processZeroByteStaticVar(Address staticVariableAddress, DWARFVariable dvar)
+			throws InvalidInputException {
 		// because this is a zero-length data type (ie. array[0]),
 		// don't create a variable at the location since it will prevent other elements
 		// from occupying the same offset
@@ -349,7 +346,7 @@ public abstract class DWARFVariableVisitor {
 		comment += String.format("Zero length variable: %s: %s", dvar.dni.getOriginalName(),
 			dvar.type.getDisplayName());
 		listing.setComment(staticVariableAddress, CodeUnit.PRE_COMMENT, comment);
-	
+
 		SymbolTable symbolTable = currentProgram.getSymbolTable();
 		symbolTable.createLabel(staticVariableAddress, dvar.dni.getName(),
 			dvar.dni.getParentNamespace(currentProgram),
@@ -377,8 +374,10 @@ public abstract class DWARFVariableVisitor {
 	}
 
 	protected final Address toAddr(Number offset) {
-		return currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(
-			offset.longValue(), true);
+		return currentProgram.getAddressFactory()
+				.getDefaultAddressSpace()
+				.getAddress(
+					offset.longValue(), true);
 	}
 
 	/**
@@ -398,13 +397,13 @@ public abstract class DWARFVariableVisitor {
 
 	private boolean isArrayDataTypeCompatibleWithExistingData(Array arrayDT, Address address) {
 		Listing listing = currentProgram.getListing();
-	
+
 		// quick success
 		Data arrayData = listing.getDataAt(address);
 		if (arrayData != null && arrayData.getBaseDataType().isEquivalent(arrayDT)) {
 			return true;
 		}
-	
+
 		if (arrayData != null && arrayDT.getDataType() instanceof CharDataType &&
 			arrayData.getBaseDataType() instanceof StringDataType) {
 			if (arrayData.getLength() >= arrayDT.getLength()) {
@@ -413,7 +412,7 @@ public abstract class DWARFVariableVisitor {
 			return DataUtilities.isUndefinedRange(currentProgram,
 				address.add(arrayData.getLength()), address.add(arrayDT.getLength() - 1));
 		}
-	
+
 		// test each element
 		for (int i = 0; i < arrayDT.getNumElements(); i++) {
 			Address elementAddress = address.add(arrayDT.getElementLength() * i);
@@ -423,11 +422,12 @@ public abstract class DWARFVariableVisitor {
 				return false;
 			}
 		}
-	
+
 		return true;
 	}
 
-	private boolean isStructDataTypeCompatibleWithExistingData(Structure structDT, Address address) {
+	private boolean isStructDataTypeCompatibleWithExistingData(Structure structDT,
+			Address address) {
 		for (DataTypeComponent dtc : structDT.getDefinedComponents()) {
 			Address memberAddress = address.add(dtc.getOffset());
 			if (!isDataTypeCompatibleWithExistingData(dtc.getDataType(), memberAddress)) {
@@ -443,24 +443,24 @@ public abstract class DWARFVariableVisitor {
 		if (data == null) {
 			return true;
 		}
-	
+
 		DataType dataDT = data.getBaseDataType();
 		return dataDT instanceof Pointer;
 	}
 
 	private boolean isSimpleDataTypeCompatibleWithExistingData(DataType dataType, Address address) {
 		Listing listing = currentProgram.getListing();
-	
+
 		Data data = listing.getDataAt(address);
 		if (data == null) {
 			return true;
 		}
-	
+
 		DataType dataDT = data.getBaseDataType();
 		if (dataType instanceof CharDataType && dataDT instanceof StringDataType) {
 			return true;
 		}
-	
+
 		if (!dataType.getClass().isInstance(dataDT)) {
 			return false;
 		}
@@ -477,7 +477,7 @@ public abstract class DWARFVariableVisitor {
 		if (data == null) {
 			return true;
 		}
-	
+
 		DataType dataDT = data.getBaseDataType();
 		if (!(dataDT instanceof Enum || dataDT instanceof AbstractIntegerDataType)) {
 			return false;
@@ -496,7 +496,7 @@ public abstract class DWARFVariableVisitor {
 			address.add(dataType.getLength() - 1))) {
 			return true;
 		}
-	
+
 		if (dataType instanceof Array) {
 			return isArrayDataTypeCompatibleWithExistingData((Array) dataType, address);
 		}
@@ -513,13 +513,13 @@ public abstract class DWARFVariableVisitor {
 		if (dataType instanceof Enum) {
 			return isEnumDataTypeCompatibleWithExistingData((Enum) dataType, address);
 		}
-	
+
 		if (dataType instanceof CharDataType || dataType instanceof StringDataType ||
 			dataType instanceof IntegerDataType || dataType instanceof UnsignedIntegerDataType ||
 			dataType instanceof BooleanDataType) {
 			return isSimpleDataTypeCompatibleWithExistingData(dataType, address);
 		}
-	
+
 		return false;
 	}
 
@@ -552,10 +552,11 @@ public abstract class DWARFVariableVisitor {
 		return null;
 	}
 
-	private void outputGlobal(Address address, DataType baseDataType, boolean external, DWARFSourceInfo sourceInfo, DWARFNameInfo dni) {
-	
+	private void outputGlobal(Address address, DataType baseDataType, boolean external,
+			DWARFSourceInfo sourceInfo, DWARFNameInfo dni) {
+
 		Namespace namespace = dni.getParentNamespace(currentProgram);
-	
+
 		SymbolTable symbolTable = currentProgram.getSymbolTable();
 		try {
 			symbolTable.createLabel(address, dni.getName(), namespace, SourceType.IMPORTED);
@@ -567,15 +568,15 @@ public abstract class DWARFVariableVisitor {
 				"Error creating symbol " + namespace + "/" + dni.getName() + " at " + address);
 			return;
 		}
-	
+
 		setExternalEntryPoint(external, address);
-	
+
 		Data varData = createVariable(address, baseDataType, dni);
 		importSummary.globalVarsAdded++;
-	
+
 		if (sourceInfo != null) {
 			appendComment(address, CodeUnit.EOL_COMMENT, sourceInfo.getDescriptionStr(), "\n");
-	
+
 			if (varData != null) {
 				moveIntoFragment(dni.getName(), varData.getMinAddress(), varData.getMaxAddress(),
 					sourceInfo.getFilename());
@@ -583,13 +584,14 @@ public abstract class DWARFVariableVisitor {
 		}
 	}
 
-	private static int findFirstUse(Program currentProgram, Register register, long funcAddr, long firstUseAddr) {
+	private static int findFirstUse(Program currentProgram, Register register, long funcAddr,
+			long firstUseAddr) {
 		// look for the first write to this register within this range.
 		Address entry = currentProgram.getMinAddress().getNewAddress(firstUseAddr);
 		InstructionIterator instructions = currentProgram.getListing().getInstructions(entry, true);
 		while (instructions.hasNext()) {
 			Instruction instruction = instructions.next();
-	
+
 			FlowType flowType = instruction.getFlowType();
 			if (flowType.isTerminal()) {
 				return 0;
@@ -613,14 +615,14 @@ public abstract class DWARFVariableVisitor {
 	/**
 		 * Holds values necessary to create a new variable / parameter.
 		 */
-		public static class DWARFVariable {
-			public DWARFNameInfo dni;
-			public DataType type;
-			public long offset;// Offset on stack or firstuseoffset if this is a register
-			public boolean isStackOffset;// true if offset represents stack offset
-			public long lexicalOffset;
-			public Register reg;
-		}
+	public static class DWARFVariable {
+		public DWARFNameInfo dni;
+		public DataType type;
+		public long offset;// Offset on stack or firstuseoffset if this is a register
+		public boolean isStackOffset;// true if offset represents stack offset
+		public long lexicalOffset;
+		public Register reg;
+	}
 
 	/**
 	 * Move an address range into a fragment.
@@ -713,7 +715,8 @@ public abstract class DWARFVariableVisitor {
 		return retarray;
 	}
 
-	public DWARFVariableVisitor(DWARFProgram prog, Program currentProgram, DWARFDataTypeManager dwarfDTM) {
+	public DWARFVariableVisitor(DWARFProgram prog, Program currentProgram,
+			DWARFDataTypeManager dwarfDTM) {
 		super();
 		this.prog = prog;
 		this.currentProgram = currentProgram;
