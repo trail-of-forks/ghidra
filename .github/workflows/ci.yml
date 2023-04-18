@@ -9,6 +9,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  GRADLE_VERSION: 8.1
+  JAVA_VERSION: 17
+
 jobs:
   build-natives:
     name: Build Native - ${{ matrix.os }}
@@ -26,17 +30,17 @@ jobs:
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: 17
+          java-version: ${{ env.JAVA_VERSION }}
       - name: Fetch deps
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.1
+          gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: -I gradle/support/fetchDependencies.gradle init
       - name: Build natives
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.1
+          gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: buildNatives_${{ matrix.target }}
       - name: Tar the binaries
@@ -60,7 +64,7 @@ jobs:
       - uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: 17
+          java-version: ${{ env.JAVA_VERSION }}
       - name: Download linux_x86_64
         uses: actions/download-artifact@v3
         with:
@@ -78,13 +82,13 @@ jobs:
       - name: Fetch deps
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.1
+          gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: -I gradle/support/fetchDependencies.gradle init
       - name: Build multiplatform release
         uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: 8.1
+          gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: -PallPlatforms buildGhidra -x ip
       - name: Upload multiplatform build
