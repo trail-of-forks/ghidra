@@ -3,7 +3,7 @@ on:
   pull_request:
   push:
     branches:
-      - 'amp/**'
+      - 'amp/main'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -31,13 +31,13 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.1
-          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/') }}
+          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: -I gradle/support/fetchDependencies.gradle init
       - name: Build natives
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.1
-          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/') }}
+          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: buildNatives_${{ matrix.target }}
       - name: Tar the binaries
         run: tar -cvf "${{matrix.target}}.build.tar" $(find . -path "*/build/os/${{ matrix.target }}/*" -type f)
@@ -79,13 +79,13 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.1
-          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/') }}
+          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: -I gradle/support/fetchDependencies.gradle init
       - name: Build multiplatform release
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 8.1
-          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/') }}
+          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: -PallPlatforms buildGhidra -x ip
       - name: Upload multiplatform build
         uses: actions/upload-artifact@v3
