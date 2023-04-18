@@ -36,13 +36,13 @@ jobs:
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
-          arguments: -I gradle/support/fetchDependencies.gradle init
+          arguments: --parallel -I gradle/support/fetchDependencies.gradle init
       - name: Build natives
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
-          arguments: buildNatives_${{ matrix.target }}
+          arguments: --parallel buildNatives_${{ matrix.target }}
       - name: Tar the binaries
         run: tar -cvf "${{matrix.target}}.build.tar" $(find . -path "*/build/os/${{ matrix.target }}/*" -type f)
       - name: Upload artifacts
@@ -84,13 +84,13 @@ jobs:
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
-          arguments: -I gradle/support/fetchDependencies.gradle init
+          arguments: --parallel -I gradle/support/fetchDependencies.gradle init
       - name: Build multiplatform release
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
-          arguments: -PallPlatforms buildGhidra -x ip
+          arguments: --parallel -PallPlatforms buildGhidra -x ip
       - name: Upload multiplatform build
         uses: actions/upload-artifact@v3
         with:
