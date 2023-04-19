@@ -91,17 +91,8 @@ abstract public class ElfRelocationHandler implements ExtensionPoint {
 	 */
 	public static void applyComponentOffsetPointer(Program program, Address addr,
 			long componentOffset) {
-		// TODO: we could also assign non-default address space setting if needed
-		PointerTypedef dt =
-			new PointerTypedef(null, null, -1, program.getDataTypeManager(), componentOffset);
-		try {
-			DataUtilities.createData(program, addr, dt, -1,
-				ClearDataMode.CLEAR_ALL_UNDEFINED_CONFLICT_DATA);
-		}
-		catch (CodeUnitInsertionException e) {
-			Msg.error(ElfRelocationHandler.class,
-				"Failed to apply component-offset pointer at " + addr);
-		}
+		Msg.error(ElfRelocationHandler.class,
+				"Refusing to apply component-offset pointer at " + addr);
 	}
 
 	/**
