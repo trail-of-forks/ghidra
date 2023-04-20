@@ -1,4 +1,4 @@
-# SLA specification file for IBM PowerPC e500 series core
+# SLA specification file for NXP PowerPC e200 series core
 
 # NOTE: This language variant includes some registers and instructions not supported
 # by the actual processor (e.g., floating pointer registers and associated instructions).
