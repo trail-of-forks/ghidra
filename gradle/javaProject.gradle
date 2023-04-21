@@ -157,6 +157,9 @@ artifacts {
 	Provide test dependencies here so each build file does not have to.
 */  
 dependencies {
+	errorprone "com.google.errorprone:error_prone_core:2.18.0"
+	annotationProcessor "com.google.guava:guava-beta-checker:1.0"
+
 	integrationTestImplementation "org.hamcrest:hamcrest:2.2"
 
 	testImplementation "org.hamcrest:hamcrest:2.2"
@@ -183,6 +186,12 @@ ext.addExports = { List<String> exports ->
 			}
 		}
 	}
+}
+
+tasks.named("compileJava").configure {
+	options.errorprone.disableAllChecks = true
+	// Error on usage of Guava beta APIs. These are not forward-compatible
+	options.errorprone.error("BetaApi")
 }
 
 // Customize generated Eclipse projects
