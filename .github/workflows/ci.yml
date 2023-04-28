@@ -85,6 +85,12 @@ jobs:
           gradle-version: ${{ env.GRADLE_VERSION }}
           cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
           arguments: --parallel -I gradle/support/fetchDependencies.gradle init
+      - name: Prepare development files
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+          cache-read-only: ${{ !startsWith(github.ref, 'refs/heads/amp/main') }}
+          arguments: --parallel prepDev
       - name: Build multiplatform release
         uses: gradle/gradle-build-action@v2
         with:
