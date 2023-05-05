@@ -38,12 +38,13 @@ import ghidra.program.model.symbol.*;
 import ghidra.util.Msg;
 import ghidra.util.exception.*;
 import ghidra.util.task.TaskMonitor;
+import ghidra.program.model.util.CodeUnitInsertionException;
 
 /**
  * Iterates through all DIEAs in a {@link DWARFProgram} and creates Ghidra functions
  * and variables.
  */
-public class DWARFFunctionImporter extends DWARFVariableVisitor {
+public class DWARFFunctionImporter {
 
 	/**
 	 * Inline funcs shorter than this value receive comments at EOL instead of PRE
@@ -51,6 +52,9 @@ public class DWARFFunctionImporter extends DWARFVariableVisitor {
 	 */
 	private static final int INLINE_FUNC_SHORT_LEN = 8;
 
+	private final DWARFProgram prog;
+	private final Program currentProgram;
+	private final DWARFDataTypeManager dwarfDTM;
 	private final DWARFImportOptions importOptions;
 	private final DWARFImportSummary importSummary;
 
@@ -432,6 +436,15 @@ public class DWARFFunctionImporter extends DWARFVariableVisitor {
 				"\n");
 		}
 	}
+
+	private boolean shouldProcess(DIEAggregate diea) {
+		if (processedOffsets.contains(diea.getOffset())) {
+			return false;
+		}
+		processedOffsets.add(diea.getOffset());
+		return true;
+	}
+
 
 	/*
 	 * Process lexical block entries inside of a function.
