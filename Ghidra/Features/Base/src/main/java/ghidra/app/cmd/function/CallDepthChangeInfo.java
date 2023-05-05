@@ -233,8 +233,6 @@ public class CallDepthChangeInfo {
 			return override.intValue();
 		}
 
-		Msg.info(this, "in call");
-
 		int depthChange = 0;
 
 		if (!trans.supportsPcode()) {
@@ -255,7 +253,6 @@ public class CallDepthChangeInfo {
 			//			return depthChange;
 			return 0;
 		}
-		Msg.info(this, "in loop");
 
 		PcodeOp[] pcode = instr.getPcode();
 		Varnode outVarNode = null;
@@ -265,11 +262,9 @@ public class CallDepthChangeInfo {
 			Varnode output = op.getOutput();
 			switch (op.getOpcode()) {
 				case PcodeOp.COPY:
-					Msg.info(this, "in copy");
 					if (isStackPointer(input0) && !isStackPointer(output)) {
 						outVarNode = output;
 						possibleDepthChange = 0;
-						Msg.info(this, "Adding out as: " + output.toString());
 					}
 					break;
 				case PcodeOp.INT_ADD:
