@@ -261,6 +261,12 @@ public class CallDepthChangeInfo {
 			Varnode input1 = op.getInput(1);
 			Varnode output = op.getOutput();
 			switch (op.getOpcode()) {
+				case PcodeOp.COPY:
+					if (isStackPointer(input0) && !isStackPointer(output)) {
+						outVarNode = output;
+						possibleDepthChange = 0;
+					}
+					break;
 				case PcodeOp.INT_ADD:
 					if (isStackPointer(input0)) {
 						possibleDepthChange = (int) input1.getOffset();
