@@ -106,6 +106,20 @@ public class SparcAnalyzer extends ConstantPropagationAnalyzer {
 						ClearFlowAndRepairCmd cmd =
 							new ClearFlowAndRepairCmd(fallAddr, false, false, true);
 						cmd.applyTo(instr.getProgram(), monitor);
+					} else if (delayInstr.getMnemonicString().compareToIgnoreCase("_or") == 0) {
+						Register r0 = delayInstr.getRegister(0);
+						Register r1 = delayInstr.getRegister(1);
+						Register r2 = delayInstr.getRegister(2);
+						// if the output register is o7 (return address register)
+						// and either of the input registers are g0 (zero register)
+						// then override instruction flow to be CALL_RETURN since a
+						// saved return address was restored
+						if (r2 != null && r2.getName().equals("o7")) {
+							if ((r0 != null && r0.getName().equals("g0")) ||
+							    (r1 != null && r1.getName().equals("g0"))) {
+								instr.setFlowOverride(FlowOverride.CALL_RETURN);
+							}
+						}
 					}
 				}
 				return false;
